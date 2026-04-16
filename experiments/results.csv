@@ -1,0 +1,2 @@
+model,hidden_dims,dropout,lr,batch_size,threshold_method,threshold,test_precision,test_recall,test_f1,test_roc_auc,test_pr_auc,wall_time_sec,best_epoch
+AE-vanilla,"[64, 32, 16]",0.2,0.001,1024,percentile-95,0.256413,0.38922578745952313,0.17906768872396328,0.24528791926387652,0.6187412178432896,0.29727296238177436,438.3,31
