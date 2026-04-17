@@ -27,6 +27,7 @@ Output files:
 
 import pickle
 from pathlib import Path
+import joblib
 
 import numpy as np
 import pandas as pd
@@ -276,8 +277,7 @@ def load_processed(processed_dir: str = "data/processed",
     val = np.load(processed_path / "val.npz")
     test = np.load(processed_path / "test.npz")
 
-    with open(models_path / "scaler.pkl", "rb") as f:
-        scaler = pickle.load(f)
+    scaler = joblib.load(models_path / "scaler.pkl")
     with open(models_path / "feature_schema.pkl", "rb") as f:
         schema = pickle.load(f)
 
