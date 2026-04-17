@@ -1,7 +1,6 @@
 # Group Contributions
 
 This document lists each group member's contributions to the project.
-Required by the project rubric.
 
 ## Group Members
 

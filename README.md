@@ -25,11 +25,6 @@ dl-project/
 │   ├── baselines.py            SOTA baselines (LR, RF, XGBoost, LightGBM)
 │   └── utils.py                seeding, plotting, checkpointing
 ├── scripts/                    command-line entry points (alternative to notebooks)
-│   ├── preprocess_data.py
-│   ├── train_autoencoder.py
-│   ├── train_supervised.py
-│   ├── run_baselines.py
-│   ├── hyperparameter_sweep.py
 │   └── load_and_predict.py
 ├── notebooks/                  main deliverable — run in order
 │   ├── 0_Preprocessing.ipynb   clean data, engineer features, save arrays
@@ -79,27 +74,6 @@ notebooks/4_Final_Comparison.ipynb     ← Full comparison table + plots.
 > **Important:** Notebook 0 must be run before any other notebook. It saves
 > the processed arrays that all other notebooks load at startup.
 
-## Running the Project — Command Line (alternative)
-
-```bash
-# 1. Preprocess once (slow: ~1-2 min for 1.47M rows)
-python scripts/preprocess_data.py --csv data/Fraudulent_E-Commerce_Transaction_Data.csv
-
-# 2. Train main model
-python scripts/train_autoencoder.py --processed
-
-# 3. Train supervised DNN comparison
-python scripts/train_supervised.py --processed
-
-# 4. Run SOTA baselines
-python scripts/run_baselines.py --processed
-
-# 5. Load saved model and run inference (reproducibility check)
-python scripts/load_and_predict.py \
-    --model models/autoencoder_best.pt \
-    --csv data/Fraudulent_E-Commerce_Transaction_Data.csv \
-    --model_type autoencoder
-```
 
 ## What the Preprocessing Does
 
