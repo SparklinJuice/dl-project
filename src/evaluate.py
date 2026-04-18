@@ -218,3 +218,124 @@ def get_failure_cases(
         results["false_positives"] = fp_df
 
     return results
+
+
+# =============================================================================
+# CLI EXECUTION BLOCK
+# =============================================================================
+if __name__ == "__main__":
+    import argparse
+    import os
+    from pathlib import Path
+    from torch.utils.data import DataLoader
+    
+    # Import model classes and utilities
+    from autoencoder import build_autoencoder
+    from model import FraudDetectorDNN
+    from dataset import FraudDataset, NormalOnlyDataset
+    from utils import load_checkpoint, get_device
+    from preprocessing_withIP import load_processed
+    
+    # 1. Parse the command line arguments
+    parser = argparse.ArgumentParser(description="Run evaluation on a trained model.")
+    parser.add_argument("--model_path", type=str, required=True, help="Path to the saved model (.pt file)")
+    parser.add_argument("--data_dir", type=str, default="data/processed_withIP", 
+                        help="Directory containing processed data (train.npz, val.npz, test.npz)")
+    parser.add_argument("--batch_size", type=int, default=32, help="Batch size for evaluation")
+    args = parser.parse_args()
+
+    print(f"Loading model from: {args.model_path}")
+    if not os.path.exists(args.model_path):
+        raise FileNotFoundError(f"Could not find model file at {args.model_path}")
+
+    # 2. Setup Device
+    device = get_device()
+    print(f"Using device: {device}")
+
+    # 3. Load the Model
+    print(f"Loading checkpoint...")
+    checkpoint = load_checkpoint(args.model_path, device=device)
+    metadata = checkpoint["metadata"]
+    model_type = metadata.get("model_type", "autoencoder")
+    input_dim = metadata["input_dim"]
+    hidden_dims = metadata.get("hidden_dims", [64, 32, 16])
+    dropout = metadata.get("dropout", 0.2)
+    
+    if model_type == "autoencoder":
+        model = build_autoencoder(
+            model_type="FraudAutoencoder",
+            input_dim=input_dim,
+            hidden_dims=hidden_dims,
+            dropout=dropout,
+        )
+    elif model_type == "supervised":
+        model = FraudDetectorDNN(
+            input_dim=input_dim,
+            hidden_dims=hidden_dims,
+            dropout=dropout,
+        )
+    else:
+        raise ValueError(f"Unknown model_type: {model_type}")
+    
+    model.load_state_dict(checkpoint["model_state_dict"])
+    model.to(device)
+    print(f"Loaded {model_type} model with input_dim={input_dim}")
+    
+    # 4. Load the Data
+    print(f"Loading data from {args.data_dir}...")
+    data = load_processed(processed_dir=args.data_dir, models_dir="models")
+    
+    x_test = data["x_test"]
+    y_test = data["y_test"]
+    feature_names = data["feature_names"]
+    
+    # Create test dataset and dataloader
+    test_dataset = FraudDataset(x_test, y_test)
+    test_loader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False)
+    
+    # 5. Run the Evaluation using your functions!
+    print(f"Computing predictions on test set...")
+    
+    if model_type == "autoencoder":
+        # For autoencoder: compute reconstruction errors
+        errors, labels = compute_reconstruction_errors(model, test_loader, device)
+        
+        if labels is not None:
+            threshold = find_threshold_by_f1(errors, labels)
+            metrics = evaluate(errors, labels, threshold=threshold, label="Test")
+            
+            # Show failure cases if requested
+            print("\n" + "="*60)
+            print("  Failure Case Analysis")
+            print("="*60)
+            failure_cases = get_failure_cases(
+                errors, labels, x_test, threshold, feature_names, n_examples=5
+            )
+            if "false_negatives" in failure_cases:
+                print("\nFalse Negatives (Missed Fraud):")
+                print(failure_cases["false_negatives"])
+            if "false_positives" in failure_cases:
+                print("\nFalse Positives (False Alarms):")
+                print(failure_cases["false_positives"])
+        else:
+            print("No labels provided in data loader. Cannot compute F1 or run full evaluation.")
+    
+    elif model_type == "supervised":
+        # For supervised DNN: compute sigmoid probabilities
+        probs, labels = get_predictions(model, test_loader, device)
+        threshold = find_optimal_threshold(probs, labels)
+        metrics = evaluate(probs, labels, threshold=threshold, label="Test")
+        
+        # Show failure cases
+        print("\n" + "="*60)
+        print("  Failure Case Analysis")
+        print("="*60)
+        failure_cases = get_failure_cases(
+            probs, labels, x_test, threshold, feature_names, n_examples=5
+        )
+        if "false_negatives" in failure_cases:
+            print("\nFalse Negatives (Missed Fraud):")
+            print(failure_cases["false_negatives"])
+        if "false_positives" in failure_cases:
+            print("\nFalse Positives (False Alarms):")
+            print(failure_cases["false_positives"])
