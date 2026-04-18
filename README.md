@@ -33,13 +33,6 @@ dl-project/
 │   ├── 3a_Supervised_DNN.ipynb                 supervised DNN baseline
 │   ├── 3b_DNN_Tuning.ipynb                    DNN hyperparameter tuning (3 passes)
 │   └── 4_Final_Comparison.ipynb               all-models comparison table + plots
-├── scripts/                        CLI entry points
-│   ├── preprocess_data.py          preprocessing
-│   ├── train_autoencoder.py        autoencoder training
-│   ├── train_supervised.py         DNN training
-│   ├── run_baselines.py            SOTA baselines
-│   ├── hyperparameter_sweep.py     grid search
-│   └── load_and_predict.py         load saved model, run inference
 ├── models/                         saved checkpoints (auto-created)
 │   ├── scaler.pkl                  fitted StandardScaler
 │   ├── feature_schema.pkl          column names + metadata
