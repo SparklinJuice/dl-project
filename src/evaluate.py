@@ -280,8 +280,8 @@ if __name__ == "__main__":
             noise_std=noise_std,
         )
         is_autoencoder = True
-    elif model_type == "supervised_dnn":
-        # It's a supervised DNN
+    elif model_type in ["supervised_dnn", "supervised_dnn_tuned"]:
+        # It's a supervised DNN (including tuned variants)
         model = FraudDetectorDNN(
             input_dim=input_dim,
             hidden_dims=hidden_dims,
@@ -290,7 +290,7 @@ if __name__ == "__main__":
         is_autoencoder = False
     else:
         raise ValueError(f"Unknown model_type: {model_type}. "
-                         f"Expected 'vanilla', 'denoising', or 'supervised_dnn'.")
+                         f"Expected 'vanilla', 'denoising', 'supervised_dnn', or 'supervised_dnn_tuned'.")
     
     model.load_state_dict(checkpoint["model_state_dict"])
     model.to(device)
@@ -299,6 +299,24 @@ if __name__ == "__main__":
     # 4. Load the Data
     print(f"Loading data from {args.data_dir}...")
     data = load_processed(processed_dir=args.data_dir, models_dir="../models")
+    
+    # Check if data dimensions match the model's input_dim
+    if data["x_test"].shape[1] != input_dim:
+        print(f"WARNING: Data has {data['x_test'].shape[1]} features but model expects {input_dim}.")
+        # Try to load the alternate data directory
+        if "withIP" in args.data_dir:
+            alt_data_dir = args.data_dir.replace("withIP", "").rstrip("_")
+            print(f"Trying to load from {alt_data_dir}...")
+        else:
+            alt_data_dir = args.data_dir.replace("processed", "processed_withIP")
+            print(f"Trying to load from {alt_data_dir}...")
+        
+        try:
+            data = load_processed(processed_dir=alt_data_dir, models_dir="../models")
+            print(f"Successfully loaded data with {data['x_test'].shape[1]} features.")
+        except Exception as e:
+            raise RuntimeError(f"Data dimension mismatch (model expects {input_dim}, "
+                             f"but loaded {data['x_test'].shape[1]}) and could not load alternate data: {e}")
     
     x_test = data["x_test"]
     y_test = data["y_test"]
