@@ -198,12 +198,19 @@ def get_failure_cases(
     fn_mask = (labels == 1) & (preds == 0)  # Missed fraud
     fp_mask = (labels == 0) & (preds == 1)  # False alarms
 
+    # Handle feature_names if it has fewer columns than features
+    if len(feature_names) < features.shape[1]:
+        # Pad with generic names for extra features
+        padded_names = list(feature_names) + [f"feature_{i}" for i in range(len(feature_names), features.shape[1])]
+    else:
+        padded_names = feature_names
+
     results = {}
     if fn_mask.any():
         fn_idx = np.where(fn_mask)[0]
         # Sort by how confident the model was that it was normal
         fn_idx = fn_idx[np.argsort(scores[fn_idx])[:n_examples]]
-        fn_df = pd.DataFrame(features[fn_idx], columns=feature_names)
+        fn_df = pd.DataFrame(features[fn_idx], columns=padded_names)
         fn_df["score"] = scores[fn_idx]
         fn_df["true_label"] = labels[fn_idx]
         results["false_negatives"] = fn_df
@@ -212,7 +219,7 @@ def get_failure_cases(
         fp_idx = np.where(fp_mask)[0]
         # Sort by how confident the model was that it was fraud
         fp_idx = fp_idx[np.argsort(-scores[fp_idx])[:n_examples]]
-        fp_df = pd.DataFrame(features[fp_idx], columns=feature_names)
+        fp_df = pd.DataFrame(features[fp_idx], columns=padded_names)
         fp_df["score"] = scores[fp_idx]
         fp_df["true_label"] = labels[fp_idx]
         results["false_positives"] = fp_df
@@ -239,7 +246,7 @@ if __name__ == "__main__":
     # 1. Parse the command line arguments
     parser = argparse.ArgumentParser(description="Run evaluation on a trained model.")
     parser.add_argument("--model_path", type=str, required=True, help="Path to the saved model (.pt file)")
-    parser.add_argument("--data_dir", type=str, default="data/processed_withIP", 
+    parser.add_argument("--data_dir", type=str, default="../data/processed_withIP", 
                         help="Directory containing processed data (train.npz, val.npz, test.npz)")
     parser.add_argument("--batch_size", type=int, default=32, help="Batch size for evaluation")
     args = parser.parse_args()
@@ -256,26 +263,34 @@ if __name__ == "__main__":
     print(f"Loading checkpoint...")
     checkpoint = load_checkpoint(args.model_path, device=device)
     metadata = checkpoint["metadata"]
-    model_type = metadata.get("model_type", "autoencoder")
+    model_type = metadata.get("model_type", "vanilla")
     input_dim = metadata["input_dim"]
     hidden_dims = metadata.get("hidden_dims", [64, 32, 16])
     dropout = metadata.get("dropout", 0.2)
+    noise_std = metadata.get("noise_std", 0.1)
     
-    if model_type == "autoencoder":
+    # Determine if it's an autoencoder or supervised model
+    if model_type in ["vanilla", "denoising"]:
+        # It's an autoencoder
         model = build_autoencoder(
-            model_type="FraudAutoencoder",
+            model_type=model_type,
             input_dim=input_dim,
             hidden_dims=hidden_dims,
             dropout=dropout,
+            noise_std=noise_std,
         )
-    elif model_type == "supervised":
+        is_autoencoder = True
+    elif model_type == "supervised_dnn":
+        # It's a supervised DNN
         model = FraudDetectorDNN(
             input_dim=input_dim,
             hidden_dims=hidden_dims,
             dropout=dropout,
         )
+        is_autoencoder = False
     else:
-        raise ValueError(f"Unknown model_type: {model_type}")
+        raise ValueError(f"Unknown model_type: {model_type}. "
+                         f"Expected 'vanilla', 'denoising', or 'supervised_dnn'.")
     
     model.load_state_dict(checkpoint["model_state_dict"])
     model.to(device)
@@ -283,7 +298,7 @@ if __name__ == "__main__":
     
     # 4. Load the Data
     print(f"Loading data from {args.data_dir}...")
-    data = load_processed(processed_dir=args.data_dir, models_dir="models")
+    data = load_processed(processed_dir=args.data_dir, models_dir="../models")
     
     x_test = data["x_test"]
     y_test = data["y_test"]
@@ -296,7 +311,7 @@ if __name__ == "__main__":
     # 5. Run the Evaluation using your functions!
     print(f"Computing predictions on test set...")
     
-    if model_type == "autoencoder":
+    if is_autoencoder:
         # For autoencoder: compute reconstruction errors
         errors, labels = compute_reconstruction_errors(model, test_loader, device)
         
@@ -320,7 +335,7 @@ if __name__ == "__main__":
         else:
             print("No labels provided in data loader. Cannot compute F1 or run full evaluation.")
     
-    elif model_type == "supervised":
+    else:  # supervised_dnn
         # For supervised DNN: compute sigmoid probabilities
         probs, labels = get_predictions(model, test_loader, device)
         threshold = find_optimal_threshold(probs, labels)
